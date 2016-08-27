@@ -6,23 +6,34 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"regexp"
 	"strconv"
 )
 
+func usage() {
+	fmt.Fprintf(os.Stderr, "usage: oruxgmaps /path/to/onlinemapsources.xml > output.xml")
+	flag.PrintDefaults()
+	os.Exit(2)
+}
+
 func main() {
+	flag.Usage = usage
 	flag.Parse()
 
 	args := flag.Args()
 
-	// TODO(mpl): size limiter
 	f, err := os.Open(args[0])
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer f.Close()
+	lr := io.LimitedReader{
+		R: f,
+		N: 1 << 20,
+	}
 
 	var (
 		dataBefore []byte
@@ -35,7 +46,7 @@ func main() {
 
 	lastuid := 0
 	isAfter := false
-	sc := bufio.NewScanner(f)
+	sc := bufio.NewScanner(&lr)
 	for sc.Scan() {
 		l := sc.Bytes()
 		if endOfMapSourcesRxp.Match(l) {
