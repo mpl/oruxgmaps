@@ -9,12 +9,14 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"time"
 )
 
 const (
@@ -22,7 +24,7 @@ const (
 )
 
 var (
-	host = flag.String("host", "0.0.0.0:8080", "listening port and hostname")
+	host = flag.String("host", "0.0.0.0:4430", "listening port and hostname")
 	help = flag.Bool("h", false, "show this help")
 )
 
@@ -46,6 +48,14 @@ func makeHandler(fn func(http.ResponseWriter, *http.Request, string)) http.Handl
 		w.Header().Set("Server", idstring)
 		fn(w, r, title)
 	}
+}
+
+func rootHandler(w http.ResponseWriter, r *http.Request, url string) {
+	if r.Method != "GET" {
+		http.Error(w, "not a GET", http.StatusMethodNotAllowed)
+		return
+	}
+	http.Redirect(w, r, "/upload", http.StatusFound)
 }
 
 func uploadHandler(rw http.ResponseWriter, req *http.Request, url string) {
@@ -94,20 +104,31 @@ func uploadHandler(rw http.ResponseWriter, req *http.Request, url string) {
 		}
 		break
 	}
+
+	http.ServeContent(rw, req, "onlinemapsources.xml", time.Now(), bytes.NewReader(data))
+	return
+
+	if err := ioutil.WriteFile("/tmp/onlinemapsources.xml", data, 0700); err != nil {
+		http.Error(rw, "whatever", http.StatusInternalServerError)
+	}
+	http.ServeFile(rw, req, "/tmp/onlinemapsources.xml")
+	return
+
 	if _, err := io.Copy(rw, bytes.NewReader(data)); err != nil {
 		log.Printf("error serving onlinemapsources.xml: %v", err)
 		return
 	}
 }
 
+// TODO(mpl): make it a one click action, like in camli. but needs js afair.
 var uploadHTML = `
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Upload files</title>
+  <title>Upload</title>
 </head>
 <body>
-  <h1>Upload files</h1>
+  <h1>Upload your onlinemapsources.xml</h1>
 
   <form action="/upload" method="POST" id="uploadform" enctype="multipart/form-data">
     <input type="file" id="fileinput" multiple="false" name="file">
@@ -124,6 +145,7 @@ func main() {
 
 	uploadTmpl = template.Must(template.New("upload").Parse(uploadHTML))
 	http.HandleFunc("/upload", makeHandler(uploadHandler))
+	http.HandleFunc("/", makeHandler(rootHandler))
 	fmt.Println("Starting to listen on: https://" + *host)
 	if err := http.ListenAndServeTLS(
 		*host,
