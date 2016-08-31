@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"html/template"
 	"io"
-	"io/ioutil"
 	"log"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -58,17 +58,17 @@ func rootHandler(w http.ResponseWriter, r *http.Request, url string) {
 	http.Redirect(w, r, "/upload", http.StatusFound)
 }
 
-func uploadHandler(rw http.ResponseWriter, req *http.Request, url string) {
-	if req.Method == "GET" {
-		if err := uploadTmpl.Execute(rw, nil); err != nil {
+func uploadHandler(w http.ResponseWriter, r *http.Request, url string) {
+	if r.Method == "GET" {
+		if err := uploadTmpl.Execute(w, nil); err != nil {
 			log.Printf("template error: %v", err)
 		}
 		return
 	}
 
-	mr, err := req.MultipartReader()
+	mr, err := r.MultipartReader()
 	if err != nil {
-		http.Error(rw, err.Error(), http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -79,7 +79,7 @@ func uploadHandler(rw http.ResponseWriter, req *http.Request, url string) {
 			break
 		}
 		if err != nil {
-			http.Error(rw, "reading body: "+err.Error(), http.StatusInternalServerError)
+			http.Error(w, "reading body: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 		fileName := part.FileName()
@@ -93,31 +93,23 @@ func uploadHandler(rw http.ResponseWriter, req *http.Request, url string) {
 		}
 		_, err = io.Copy(buf, &lr)
 		if err != nil {
-			http.Error(rw, "copying: "+err.Error(), http.StatusInternalServerError)
+			http.Error(w, "copying: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 		data, err = insert(buf)
 		if err != nil {
 			log.Printf("error inserting gmaps def: %v", err)
-			http.Error(rw, "error inserting gmaps def", http.StatusInternalServerError)
+			http.Error(w, "error inserting gmaps def", http.StatusInternalServerError)
 			return
 		}
 		break
 	}
 
-	http.ServeContent(rw, req, "onlinemapsources.xml", time.Now(), bytes.NewReader(data))
-	return
-
-	if err := ioutil.WriteFile("/tmp/onlinemapsources.xml", data, 0700); err != nil {
-		http.Error(rw, "whatever", http.StatusInternalServerError)
-	}
-	http.ServeFile(rw, req, "/tmp/onlinemapsources.xml")
-	return
-
-	if _, err := io.Copy(rw, bytes.NewReader(data)); err != nil {
-		log.Printf("error serving onlinemapsources.xml: %v", err)
-		return
-	}
+	h := w.Header()
+	h.Set("Content-Type", "application/octet-stream")
+	h.Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": "onlinemapsources.xml"}))
+	w.WriteHeader(http.StatusOK)
+	http.ServeContent(w, r, "onlinemapsources.xml", time.Now(), bytes.NewReader(data))
 }
 
 // TODO(mpl): make it a one click action, like in camli. but needs js afair.
