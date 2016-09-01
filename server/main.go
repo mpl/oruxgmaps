@@ -126,6 +126,10 @@ var uploadHTML = `
     <input type="submit" id="filesubmit" value="Upload">
   </form>
 
+  <p>
+  Source code at: <a href="https://github.com/mpl/oruxgmaps">mpl/oruxgmaps</a>
+  </p>
+
 </body>
 </html>
 `
@@ -146,4 +150,3 @@ func main() {
 		log.Fatal(err)
 	}
 }
-
